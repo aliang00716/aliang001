@@ -1,0 +1,864 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>山海经·南山经 地图</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --bg: #f5efe0;
+  --panel-bg: #faf7f0;
+  --text: #2c1a0e;
+  --text-light: #6b5a4a;
+  --border: #d4c5a9;
+  --gold: #c9a037;
+  --s1-color: #2d6a4f;
+  --s2-color: #1a759f;
+  --s3-color: #9b2226;
+}
+
+body {
+  font-family: "SimSun", "宋体", "Noto Serif SC", serif;
+  background: var(--bg);
+  color: var(--text);
+  overflow: hidden;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+#header {
+  background: linear-gradient(180deg, #3d1f0a 0%, #5a2d12 100%);
+  color: #f5e6c8;
+  padding: 8px 20px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-shrink: 0;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.3);
+  z-index: 10;
+}
+#header h1 { font-size: 22px; letter-spacing: 6px; font-weight: normal; }
+#header .subtitle { font-size: 12px; color: #c9a96e; letter-spacing: 3px; }
+
+#toolbar {
+  background: #4a2c12;
+  color: #e8d5a3;
+  padding: 5px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+  font-size: 13px;
+  flex-wrap: wrap;
+}
+.tbtn {
+  background: #6b3d1a;
+  border: 1px solid #c9a96e;
+  color: #f5e6c8;
+  padding: 3px 10px;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 12px;
+  font-family: inherit;
+  white-space: nowrap;
+}
+.tbtn:hover { background: #8b5e2a; }
+.tbtn.active { background: #2d6a4f; border-color: #52b788; }
+.sep { color: #8b6b4a; margin: 0 4px; }
+#zoom-label { color: #f5c842; font-weight: bold; min-width: 45px; text-align: center; }
+
+#main-area {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+  position: relative;
+}
+
+#map-wrap {
+  flex: 1;
+  overflow: auto;
+  position: relative;
+  cursor: grab;
+  background: #e8dcc8;
+  background-image:
+    linear-gradient(rgba(139,100,60,0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(139,100,60,0.06) 1px, transparent 1px);
+}
+#map-wrap.dragging { cursor: grabbing; }
+
+#map-svg {
+  display: block;
+  transform-origin: 0 0;
+}
+
+/* 刻度和坐标辅助线在低zoom时显示 */
+.grid-line { stroke: rgba(139,100,60,0.15); stroke-width: 1px; }
+.grid-label { fill: #a09080; font-size: 10px; font-family: "SimSun",serif; }
+
+/* 连线 */
+.path-line { fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; opacity: 0.7; }
+
+/* 距离标注 */
+.dist-label { font-size: 11px; font-family: "SimSun",serif; }
+.dist-bg { fill: rgba(255,255,255,0.85); stroke: none; }
+
+/* 山峰标记 */
+.mtn-marker { cursor: pointer; transition: transform 0.15s; }
+.mtn-marker:hover { transform: scale(1.3); }
+.mtn-label { font-size: 13px; font-family: "SimSun","宋体",serif; font-weight: bold; cursor: pointer; }
+.mtn-label:hover { fill: #c92a2a !important; }
+.first-label { font-size: 14px; }
+
+/* 图例图标 */
+.resource-icon { font-size: 15px; cursor: default; }
+
+/* 详情面板 */
+#detail-panel {
+  width: 360px;
+  background: var(--panel-bg);
+  border-left: 2px solid var(--border);
+  padding: 16px;
+  overflow-y: auto;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  font-size: 13px;
+  line-height: 1.7;
+}
+#detail-panel h2 { font-size: 18px; color: #5a2d12; border-bottom: 2px solid #d4c5a9; padding-bottom: 6px; letter-spacing: 2px; }
+#detail-panel .section-title { font-weight: bold; color: #5a2d12; margin-top: 6px; font-size: 14px; }
+#detail-panel .tag-row { display: flex; flex-wrap: wrap; gap: 4px; }
+#detail-panel .tag {
+  background: #e8dcc8;
+  border: 1px solid #c9a96e;
+  padding: 2px 8px;
+  border-radius: 3px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+#detail-panel .tag.s1 { background: #d8f3dc; border-color: #52b788; }
+#detail-panel .tag.s2 { background: #caf0f8; border-color: #00b4d8; }
+#detail-panel .tag.s3 { background: #ffddd2; border-color: #e29578; }
+#detail-panel .quote {
+  background: #fdf6e3;
+  border-left: 3px solid #c9a037;
+  padding: 8px 12px;
+  font-size: 12px;
+  line-height: 1.8;
+  color: #5a2d12;
+  margin: 4px 0;
+  border-radius: 0 4px 4px 0;
+}
+#detail-panel .placeholder {
+  color: #a09080;
+  text-align: center;
+  padding: 40px 0;
+  font-size: 14px;
+}
+
+/* 比例尺 */
+#scale-bar {
+  position: absolute;
+  bottom: 16px;
+  left: 16px;
+  background: rgba(255,255,255,0.9);
+  border: 1px solid #a09080;
+  border-radius: 4px;
+  padding: 6px 10px;
+  font-size: 11px;
+  font-family: "SimSun",serif;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+#scale-bar .bar { height: 2px; background: #3d1f0a; width: 100px; position: relative; }
+#scale-bar .bar::before, #scale-bar .bar::after {
+  content: '';
+  position: absolute;
+  bottom: -4px;
+  width: 1px;
+  height: 8px;
+  background: #3d1f0a;
+}
+#scale-bar .bar::after { right: 0; }
+#scale-bar .bar::before { left: 0; }
+
+/* 坐标指示器 */
+#coord-indicator {
+  position: absolute;
+  bottom: 16px;
+  right: 16px;
+  background: rgba(255,255,255,0.9);
+  border: 1px solid #a09080;
+  border-radius: 4px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-family: "SimSun",serif;
+  pointer-events: none;
+  color: #6b5a4a;
+}
+
+/* tooltip */
+#tooltip {
+  position: absolute;
+  pointer-events: none;
+  background: rgba(58, 28, 8, 0.93);
+  color: #f5e6c8;
+  padding: 6px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-family: "SimSun",serif;
+  white-space: nowrap;
+  display: none;
+  z-index: 100;
+}
+</style>
+</head>
+<body>
+
+<div id="header">
+  <h1>山海经·南山经</h1>
+  <span class="subtitle">南次一经 · 南次二经 · 南次三经 | 凡四十山</span>
+</div>
+
+<div id="toolbar">
+  <span>🔍 缩放:</span>
+  <button class="tbtn" onclick="zoomIn()" title="放大">+</button>
+  <span id="zoom-label">25%</span>
+  <button class="tbtn" onclick="zoomOut()" title="缩小">−</button>
+  <button class="tbtn" onclick="zoomFit()" title="适应窗口">适应</button>
+  <button class="tbtn" onclick="zoomReset()" title="重置为1里=1px">1:1</button>
+  <span class="sep">|</span>
+  <span id="dist-scale" style="color:#c9a037;">1里 = 1px</span>
+  <span class="sep">|</span>
+  <span style="margin-left:auto;">图例:</span>
+  <span style="color:#2d6a4f;">■ 南次一经</span>
+  <span style="color:#1a759f;">■ 南次二经</span>
+  <span style="color:#9b2226;">■ 南次三经</span>
+  <span class="sep">|</span>
+  <span>△ 首山</span>
+  <span>▲ 山</span>
+</div>
+
+<div id="main-area">
+  <div id="map-wrap">
+    <svg id="map-svg" xmlns="http://www.w3.org/2000/svg"></svg>
+    <div id="scale-bar">
+      <span>比例尺</span>
+      <div class="bar" id="scale-bar-bar"></div>
+      <span id="scale-bar-label">500里</span>
+    </div>
+    <div id="coord-indicator">X: 0里 | Y: 0里</div>
+    <div id="tooltip"></div>
+  </div>
+  <div id="detail-panel">
+    <div class="placeholder">🖱️ 点击地图上的山峰查看详情<br><br>或悬停山峰快速预览</div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// 山海经·南山经 完整数据
+// 数据来源: 识典古籍 (shidianguji.com) 原文
+// 坐标规则: 东=+x, 南=+y, 1里=1像素
+// 角度: 东=0°, 东南=45°, 南=90°, 西南=135°, 西=180°, 西北=225°, 北=270°, 东北=315°
+// ============================================================
+
+const SCALE = 1; // 基础比例 1里 = 1px
+
+// 方向到角度的映射 (弧度, 0=东/右, 顺时针)
+const DIR_ANGLE = {
+  '东': 0,
+  '东南': Math.PI / 4,       // 45°
+  '南': Math.PI / 2,         // 90°
+  '西南': 3 * Math.PI / 4,   // 135°
+  '西': Math.PI,             // 180°
+  '西北': 5 * Math.PI / 4,   // 225°
+  '北': 3 * Math.PI / 2,     // 270°
+  '东北': 7 * Math.PI / 4,   // 315°
+};
+
+// 根据方向和距离计算 dx, dy (东为+x, 南为+y)
+function dirToOffset(direction, distance) {
+  const angle = DIR_ANGLE[direction];
+  if (angle === undefined) return { dx: 0, dy: 0 };
+  return {
+    dx: Math.round(distance * Math.cos(angle) * 1000) / 1000,
+    dy: Math.round(distance * Math.sin(angle) * 1000) / 1000,
+  };
+}
+
+// 计算从首山开始的一系列山的绝对坐标
+function computePositions(mountains) {
+  let cx = 0, cy = 0;
+  return mountains.map(m => {
+    if (m.direction === '首') {
+      cx = m.startX || 0;
+      cy = m.startY || 0;
+    } else {
+      const off = dirToOffset(m.direction, m.distance);
+      cx += off.dx;
+      cy += off.dy;
+    }
+    return { ...m, x: Math.round(cx * 100) / 100, y: Math.round(cy * 100) / 100 };
+  });
+}
+
+// ============= 南次一经 =============
+const nanshan1_raw = [
+  {
+    name:'招摇之山', direction:'首', distance:0, startX:80, startY:120, isFirst:true,
+    text:'南山经之首曰鹊山。其首曰招摇之山，临于西海之上，多桂，多金玉。有草焉，其状如韭而青花，其名曰祝余，食之不饥。有木焉，其状如榖而黑理，其花四照，其名曰迷榖，佩之不迷。有兽焉，其状如禺而白耳，伏行人走，其名曰狌狌，食之善走。丽麂之水出焉，而西流注于海，其中多育沛，佩之无瘕疾。',
+    minerals:['金','玉'], plants:[{name:'桂',desc:'多桂'},{name:'祝余',desc:'状如韭而青花，食之不饥'},{name:'迷榖',desc:'状如榖而黑理，花四照，佩之不迷'}],
+    animals:[{name:'狌狌',desc:'状如禺而白耳，伏行人走，食之善走'}],
+    rivers:[{name:'丽麂之水',desc:'西流注于海，多育沛，佩之无瘕疾'}],
+  },
+  {
+    name:'堂庭之山', direction:'东', distance:300,
+    text:'又东三百里，曰堂庭之山，多棪木，多白猿，多水玉，多黄金。',
+    minerals:['黄金','水玉'], plants:[{name:'棪木',desc:'多棪木'}],
+    animals:[{name:'白猿',desc:'多白猿'}], rivers:[],
+  },
+  {
+    name:'猿翼之山', direction:'东', distance:380,
+    text:'又东三百八十里，曰猿翼之山，其中多怪兽，水多怪鱼，多白玉，多蝮虫，多怪蛇，多怪木，不可以上。',
+    minerals:['白玉'], plants:[{name:'怪木',desc:'多怪木'}],
+    animals:[{name:'怪兽',desc:'多怪兽'},{name:'怪鱼',desc:'水多怪鱼'},{name:'蝮虫',desc:'多蝮虫'},{name:'怪蛇',desc:'多怪蛇'}], rivers:[],
+  },
+  {
+    name:'杻阳之山', direction:'东', distance:370,
+    text:'又东三百七十里，曰杻阳之山，其阳多赤金，其阴多白金。有兽焉，其状如马而白首，其文如虎而赤尾，其音如谣，其名曰鹿蜀，佩之宜子孙。怪水出焉，而东流注于宪翼之水。其中多玄龟，其状如龟而鸟首虺尾，其名曰旋龟，其音如判木，佩之不聋，可以为底。',
+    minerals:['赤金(阳)','白金(阴)'], plants:[],
+    animals:[{name:'鹿蜀',desc:'状如马而白首，文如虎而赤尾，音如谣，佩之宜子孙'},{name:'旋龟',desc:'状如龟而鸟首虺尾，音如判木，佩之不聋，可以为底'}],
+    rivers:[{name:'怪水',desc:'东流注于宪翼之水'}],
+  },
+  {
+    name:'祗山', direction:'东', distance:300,
+    text:'又东三百里，曰祗山，多水，无草木。有鱼焉，其状如牛，陵居，蛇尾有翼，其羽在魼下，其音如留牛，其名曰鯥，冬死而夏生，食之无肿疾。',
+    minerals:[], plants:[],
+    animals:[{name:'鯥',desc:'状如牛，陵居，蛇尾有翼，羽在魼下，音如留牛，冬死夏生，食之无肿疾'}], rivers:[],
+  },
+  {
+    name:'亶爰之山', direction:'东', distance:400,
+    text:'又东四百里，曰亶爰之山，多水，无草木，不可以上。有兽焉，其状如狸而有髦，其名曰类，自为牝牡，食者不妒。',
+    minerals:[], plants:[],
+    animals:[{name:'类',desc:'状如狸而有髦，自为牝牡，食者不妒'}], rivers:[],
+  },
+  {
+    name:'基山', direction:'东', distance:300,
+    text:'又东三百里，曰基山，其阳多玉，其阴多怪木。有兽焉，其状如羊，九尾四耳，其目在背，其名曰猼訑，佩之不畏。有鸟焉，其状如鸡而三首六目，六足三翼，其名曰𪁺𩿧，食之无卧。',
+    minerals:['玉(阳)'], plants:[{name:'怪木(阴)',desc:'多怪木'}],
+    animals:[{name:'猼訑',desc:'状如羊，九尾四耳，目在背，佩之不畏'},{name:'𪁺𩿧',desc:'状如鸡，三首六目，六足三翼，食之无卧'}], rivers:[],
+  },
+  {
+    name:'青丘之山', direction:'东', distance:300,
+    text:'又东三百里，曰青丘之山，其阳多玉，其阴多青䨼。有兽焉，其状如狐而九尾，其音如婴儿，能食人，食者不蛊。有鸟焉，其状如鸠，其音若呵，名曰灌灌，佩之不惑。英水出焉，南流注于即翼之泽。其中多赤鱬，其状如鱼而人面，其音如鸳鸯，食之不疥。',
+    minerals:['玉(阳)','青䨼(阴)'], plants:[],
+    animals:[{name:'九尾狐',desc:'状如狐而九尾，音如婴儿，能食人，食者不蛊'},{name:'灌灌',desc:'状如鸠，音若呵，佩之不惑'},{name:'赤鱬',desc:'状如鱼而人面，音如鸳鸯，食之不疥'}],
+    rivers:[{name:'英水',desc:'南流注于即翼之泽'}],
+  },
+  {
+    name:'箕尾之山', direction:'东', distance:350,
+    text:'又东三百五十里，曰箕尾之山，其尾踆于东海，多沙石。汸水出焉，而南流注于淯，其中多白玉。',
+    minerals:['白玉'], plants:[],
+    animals:[], rivers:[{name:'汸水',desc:'南流注于淯'}],
+  },
+];
+
+// ============= 南次二经 =============
+const nanshan2_raw = [
+  {
+    name:'柜山', direction:'首', distance:0, startX:80, startY:340, isFirst:true,
+    text:'南次二经之首，曰柜山，西临流黄，北望诸毗，东望长右。英水出焉，西南流注于赤水，其中多白玉，多丹粟。有兽焉，其状如豚，有距，其音如狗吠，其名曰狸力，见则其县多土功。有鸟焉，其状如鸱而人手，其音如痹，其名曰鴸，其鸣自号也，见则其县多放士。',
+    minerals:['白玉','丹粟'], plants:[],
+    animals:[{name:'狸力',desc:'状如豚有距，音如狗吠，见则县多土功'},{name:'鴸',desc:'状如鸱而人手，音如痹，见则县多放士'}],
+    rivers:[{name:'英水',desc:'西南流注于赤水'}],
+  },
+  {
+    name:'长右之山', direction:'东南', distance:450,
+    text:'东南四百五十里，曰长右之山，无草木，多水。有兽焉，其状如禺而四耳，其名长右，其音如吟，见则郡县大水。',
+    minerals:[], plants:[],
+    animals:[{name:'长右',desc:'状如禺而四耳，音如吟，见则郡县大水'}], rivers:[],
+  },
+  {
+    name:'尧光之山', direction:'东', distance:340,
+    text:'又东三百四十里，曰尧光之山，其阳多玉，其阴多金。有兽焉，其状如人而彘鬣，穴居而冬蛰，其名曰猾褢，其音如斫木，见则县有大繇。',
+    minerals:['玉(阳)','金(阴)'], plants:[],
+    animals:[{name:'猾褢',desc:'状如人而彘鬣，穴居冬蛰，音如斫木，见则县有大繇'}], rivers:[],
+  },
+  {
+    name:'羽山', direction:'东', distance:350,
+    text:'又东三百五十里，曰羽山，其下多水，其上多雨，无草木，多蝮虫。',
+    minerals:[], plants:[],
+    animals:[{name:'蝮虫',desc:'多蝮虫'}], rivers:[],
+  },
+  {
+    name:'瞿父之山', direction:'东', distance:370,
+    text:'又东三百七十里，曰瞿父之山，无草木，多金玉。',
+    minerals:['金','玉'], plants:[], animals:[], rivers:[],
+  },
+  {
+    name:'句余之山', direction:'东', distance:400,
+    text:'又东四百里，曰句余之山，无草木，多金玉。',
+    minerals:['金','玉'], plants:[], animals:[], rivers:[],
+  },
+  {
+    name:'浮玉之山', direction:'东', distance:500,
+    text:'又东五百里，曰浮玉之山，北望具区，东望诸毗。有兽焉，其状如虎而牛尾，其音如吠犬，其名曰彘，是食人。苕水出于其阴，北流注于具区。其中多𫚖鱼。',
+    minerals:[], plants:[],
+    animals:[{name:'彘',desc:'状如虎而牛尾，音如吠犬，是食人'},{name:'𫚖鱼',desc:'苕水中多𫚖鱼'}],
+    rivers:[{name:'苕水',desc:'出于山阴，北流注于具区'}],
+  },
+  {
+    name:'成山', direction:'东', distance:500,
+    text:'又东五百里，曰成山，四方而三坛，其上多金玉，其下多青䨼。䦠水出焉，而南流注于虖勺，其中多黄金。',
+    minerals:['金玉(上)','青䨼(下)','黄金(水中)'], plants:[], animals:[],
+    rivers:[{name:'䦠水',desc:'南流注于虖勺'}],
+  },
+  {
+    name:'会稽之山', direction:'东', distance:500,
+    text:'又东五百里，曰会稽之山，四方，其上多金玉，其下多玞石。勺水出焉，而南流注于湨。',
+    minerals:['金玉(上)','玞石(下)'], plants:[], animals:[],
+    rivers:[{name:'勺水',desc:'南流注于湨'}],
+  },
+  {
+    name:'夷山', direction:'东', distance:500,
+    text:'又东五百里，曰夷山，无草木，多沙石。湨水出焉，而南流注于列涂。',
+    minerals:[], plants:[], animals:[],
+    rivers:[{name:'湨水',desc:'南流注于列涂'}],
+  },
+  {
+    name:'仆勾之山', direction:'东', distance:500,
+    text:'又东五百里，曰仆勾之山，其上多金玉，其下多草木，无水，无鸟兽。',
+    minerals:['金玉(上)'], plants:[{name:'草木(下)',desc:'多草木'}], animals:[], rivers:[],
+  },
+  {
+    name:'咸阴之山', direction:'东', distance:500,
+    text:'又东五百里，曰咸阴之山，无草木，无水。',
+    minerals:[], plants:[], animals:[], rivers:[],
+  },
+  {
+    name:'洵山', direction:'东', distance:400,
+    text:'又东四百里，曰洵山，其阳多金，其阴多玉。有兽焉，其状如羊而无口，不可杀也，其名曰䍺。洵水出焉，而南流注于阏之泽，其中多芘蠃。',
+    minerals:['金(阳)','玉(阴)'], plants:[],
+    animals:[{name:'䍺',desc:'状如羊而无口，不可杀也'}],
+    rivers:[{name:'洵水',desc:'南流注于阏之泽，多芘蠃'}],
+  },
+  {
+    name:'虖勺之山', direction:'东', distance:400,
+    text:'又东四百里，曰虖勺之山，其上多梓楠，其下多荆杞。滂水出焉，而东流注于海。',
+    minerals:[], plants:[{name:'梓楠(上)',desc:'多梓楠'},{name:'荆杞(下)',desc:'多荆杞'}],
+    animals:[], rivers:[{name:'滂水',desc:'东流注于海'}],
+  },
+  {
+    name:'区吴之山', direction:'东', distance:500,
+    text:'又东五百里，曰区吴之山，无草木，多砂石。鹿水出焉，而南流注于滂水。',
+    minerals:[], plants:[], animals:[],
+    rivers:[{name:'鹿水',desc:'南流注于滂水'}],
+  },
+  {
+    name:'鹿吴之山', direction:'东', distance:500,
+    text:'又东五百里，曰鹿吴之山，上无草木，多金石。泽更之水出焉，而南流注于滂水。水有兽焉，名曰蛊雕，其状如雕而有角，其音如婴儿之音，是食人。',
+    minerals:['金石'], plants:[],
+    animals:[{name:'蛊雕',desc:'状如雕而有角，音如婴儿，是食人'}],
+    rivers:[{name:'泽更之水',desc:'南流注于滂水'}],
+  },
+  {
+    name:'漆吴之山', direction:'东', distance:500,
+    text:'又东五百里，曰漆吴之山，无草木，多博石，无玉。处于海，东望丘山，其光载出载入，是惟日次。',
+    minerals:['博石'], plants:[], animals:[], rivers:[],
+  },
+];
+
+// ============= 南次三经 =============
+const nanshan3_raw = [
+  {
+    name:'天虞之山', direction:'首', distance:0, startX:80, startY:880, isFirst:true,
+    text:'南次三经之首，曰天虞之山，其下多水，不可以上。',
+    minerals:[], plants:[], animals:[], rivers:[],
+  },
+  {
+    name:'祷过之山', direction:'东', distance:500,
+    text:'又东五百里，曰祷过之山，其上多金玉，其下多犀、兕、象。有鸟焉，其状如䴔而白首，三足，人面，其名曰瞿如，其鸣自号也。泿水出焉，而南流注于海。其中有虎蛟，其状鱼身而蛇尾，其音如鸳鸯，食者不肿，可以已痔。',
+    minerals:['金玉(上)'], plants:[],
+    animals:[{name:'犀',desc:'多犀'},{name:'兕',desc:'多兕'},{name:'象',desc:'多象'},{name:'瞿如',desc:'状如䴔白首三足人面'},{name:'虎蛟',desc:'鱼身蛇尾，音如鸳鸯，食者不肿，可以已痔'}],
+    rivers:[{name:'泿水',desc:'南流注于海'}],
+  },
+  {
+    name:'丹穴之山', direction:'东', distance:500,
+    text:'又东五百里，曰丹穴之山，其上多金玉。丹水出焉，而南流注于渤海。有鸟焉，其状如鸡，五采而文，名曰凤皇，首文曰德，翼文曰义，背文曰礼，膺文曰仁，腹文曰信。是鸟也，饮食自然，自歌自舞，见则天下安宁。',
+    minerals:['金玉(上)'], plants:[],
+    animals:[{name:'凤皇',desc:'状如鸡，五采而文。首文德，翼文义，背文礼，膺文仁，腹文信。饮食自然，自歌自舞，见则天下安宁'}],
+    rivers:[{name:'丹水',desc:'南流注于渤海'}],
+  },
+  {
+    name:'发爽之山', direction:'东', distance:500,
+    text:'又东五百里，曰发爽之山，无草木，多水，多白猿。泛水出焉，而南流注于渤海。',
+    minerals:[], plants:[],
+    animals:[{name:'白猿',desc:'多白猿'}],
+    rivers:[{name:'泛水',desc:'南流注于渤海'}],
+  },
+  {
+    name:'旄山之尾', direction:'东', distance:400,
+    text:'又东四百里，至于旄山之尾。其南有谷，曰育遗，多怪鸟，凯风自是出。',
+    minerals:[], plants:[],
+    animals:[{name:'怪鸟',desc:'谷中多怪鸟'}], rivers:[],
+  },
+  {
+    name:'非山之首', direction:'东', distance:400,
+    text:'又东四百里，至于非山之首。其上多金玉，无水，其下多蝮虫。',
+    minerals:['金玉(上)'], plants:[],
+    animals:[{name:'蝮虫',desc:'多蝮虫'}], rivers:[],
+  },
+  {
+    name:'阳夹之山', direction:'东', distance:500,
+    text:'又东五百里，曰阳夹之山，无草木，多水。',
+    minerals:[], plants:[], animals:[], rivers:[],
+  },
+  {
+    name:'灌湘之山', direction:'东', distance:500,
+    text:'又东五百里，曰灌湘之山，上多木，无草，多怪鸟，无兽。',
+    minerals:[], plants:[{name:'木',desc:'上多木'}],
+    animals:[{name:'怪鸟',desc:'多怪鸟'}], rivers:[],
+  },
+  {
+    name:'鸡山', direction:'东', distance:500,
+    text:'又东五百里，曰鸡山，其上多金，其下多丹雘。黑水出焉，而南流注于海。其中有𫚋鱼，其状如鲋而彘毛，其音如豚，见则天下大旱。',
+    minerals:['金(上)','丹雘(下)'], plants:[],
+    animals:[{name:'𫚋鱼',desc:'状如鲋而彘毛，音如豚，见则天下大旱'}],
+    rivers:[{name:'黑水',desc:'南流注于海'}],
+  },
+  {
+    name:'令丘之山', direction:'东', distance:400,
+    text:'又东四百里，曰令丘之山，无草木，多火。其南有谷焉，曰中谷，条风自是出。有鸟焉，其状如枭，人面四目而有耳，其名曰顒，其鸣自号也，见则天下大旱。',
+    minerals:[], plants:[],
+    animals:[{name:'顒',desc:'状如枭，人面四目有耳，鸣自号，见则天下大旱'}], rivers:[],
+  },
+  {
+    name:'仑者之山', direction:'东', distance:370,
+    text:'又东三百七十里，曰仑者之山，其上多金玉，其下多青䨼。有木焉，其状如谷而赤理，其汗如漆，其味如饴，食者不饥，可以释劳，其名曰白䓘，可以血玉。',
+    minerals:['金玉(上)','青䨼(下)'], plants:[{name:'白䓘',desc:'状如谷赤理，汗如漆，味如饴，食不饥，可释劳，可以血玉'}], animals:[], rivers:[],
+  },
+  {
+    name:'禺槁之山', direction:'东', distance:580,
+    text:'又东五百八十里，曰禺槁之山，多怪兽，多大蛇。',
+    minerals:[], plants:[],
+    animals:[{name:'怪兽',desc:'多怪兽'},{name:'大蛇',desc:'多大蛇'}], rivers:[],
+  },
+  {
+    name:'南禺之山', direction:'东', distance:580,
+    text:'又东五百八十里，曰南禺之山，其上多金玉，其下多水。有穴焉，水春辄入，夏乃出，冬则闭。佐水出焉，而东南流注于海，有凤皇、鹓鶵。',
+    minerals:['金玉(上)'], plants:[],
+    animals:[{name:'凤皇',desc:'有凤皇'},{name:'鹓鶵',desc:'有鹓鶵'}],
+    rivers:[{name:'佐水',desc:'东南流注于海'}],
+  },
+];
+
+// 计算绝对坐标
+const seriesData = [
+  {
+    id:'nanshan1', name:'南次一经', color:'#2d6a4f', colorLight:'#d8f3dc',
+    summary:'凡鹊山之首，自招摇之山以至箕尾之山，凡十山，二千九百五十里。其神状皆鸟身而龙首。其祠之礼：毛用一璋玉瘗，糈用稌米，一璧稻米，白菅为席。',
+    mountains: computePositions(nanshan1_raw),
+  },
+  {
+    id:'nanshan2', name:'南次二经', color:'#1a759f', colorLight:'#caf0f8',
+    summary:'凡南次二经之首，自柜山至于漆吴之山，凡十七山，七千二百里。其神状皆龙身而鸟首。其祠：毛用一璧瘗，糈用稌。',
+    mountains: computePositions(nanshan2_raw),
+  },
+  {
+    id:'nanshan3', name:'南次三经', color:'#9b2226', colorLight:'#ffddd2',
+    summary:'凡南次三经之首，自天虞之山以至南禺之山，凡一十四山，六千五百三十里。其神皆龙身而人面。其祠：皆一白狗祈，糈用稌。',
+    mountains: computePositions(nanshan3_raw),
+  },
+];
+
+// 计算整体范围
+let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+const allMountains = [];
+seriesData.forEach(s => {
+  s.mountains.forEach(m => {
+    allMountains.push({...m, seriesId: s.id, seriesName: s.name, seriesColor: s.color, seriesColorLight: s.colorLight});
+    if (m.x < minX) minX = m.x;
+    if (m.y < minY) minY = m.y;
+    if (m.x > maxX) maxX = m.x;
+    if (m.y > maxY) maxY = m.y;
+  });
+});
+const PAD = 60;
+minX -= PAD; minY -= PAD;
+maxX += PAD; maxY += PAD;
+const MAP_W = maxX - minX;
+const MAP_H = maxY - minY;
+
+// ============= SVG 渲染 =============
+const svg = document.getElementById('map-svg');
+const mapWrap = document.getElementById('map-wrap');
+const tooltip = document.getElementById('tooltip');
+const detailPanel = document.getElementById('detail-panel');
+const zoomLabel = document.getElementById('zoom-label');
+const scaleBarBar = document.getElementById('scale-bar-bar');
+const scaleBarLabel = document.getElementById('scale-bar-label');
+const coordIndicator = document.getElementById('coord-indicator');
+
+let currentZoom = 1;
+let currentMountain = null;
+
+function buildSVG(zoom) {
+  const w = MAP_W * zoom;
+  const h = MAP_H * zoom;
+  svg.setAttribute('width', w);
+  svg.setAttribute('height', h);
+  svg.setAttribute('viewBox', `${minX} ${minY} ${MAP_W} ${MAP_H}`);
+  svg.style.width = w + 'px';
+  svg.style.height = h + 'px';
+
+  let html = '';
+
+  // 网格线 (每500里)
+  const gridStep = 500;
+  for (let gx = Math.floor(minX / gridStep) * gridStep; gx <= maxX; gx += gridStep) {
+    html += `<line class="grid-line" x1="${gx}" y1="${minY}" x2="${gx}" y2="${maxY}"/>`;
+  }
+  for (let gy = Math.floor(minY / gridStep) * gridStep; gy <= maxY; gy += gridStep) {
+    html += `<line class="grid-line" x1="${minX}" y1="${gy}" x2="${maxX}" y2="${gy}"/>`;
+  }
+  // 网格标签
+  for (let gx = Math.floor(minX / gridStep) * gridStep; gx <= maxX; gx += gridStep) {
+    if (gx === 0) continue;
+    html += `<text class="grid-label" x="${gx}" y="${minY + PAD/3}" text-anchor="middle">${gx}里</text>`;
+    html += `<text class="grid-label" x="${gx}" y="${maxY - 5}" text-anchor="middle">${gx}里</text>`;
+  }
+  for (let gy = Math.floor(minY / gridStep) * gridStep; gy <= maxY; gy += gridStep) {
+    if (gy === 0) continue;
+    html += `<text class="grid-label" x="${minX + 5}" y="${gy + 4}">${gy}里</text>`;
+  }
+
+  // 方向指示 (东北角指南针)
+  const compassX = minX + 20;
+  const compassY = minY + 20;
+  html += `<g transform="translate(${compassX},${compassY})">
+    <circle cx="0" cy="0" r="14" fill="rgba(255,255,255,0.8)" stroke="#a09080"/>
+    <line x1="0" y1="-10" x2="0" y2="10" stroke="#c92a2a" stroke-width="1.5"/>
+    <line x1="-10" y1="0" x2="10" y2="0" stroke="#2c1a0e" stroke-width="1.5"/>
+    <polygon points="0,-12 -3,-4 3,-4" fill="#c92a2a"/>
+    <text x="0" y="-15" text-anchor="middle" font-size="10" fill="#c92a2a" font-family="SimSun">北</text>
+    <text x="14" y="1" font-size="10" fill="#2c1a0e" font-family="SimSun">东</text>
+  </g>`;
+
+  // 连线
+  seriesData.forEach(s => {
+    const ms = s.mountains;
+    let pathD = '';
+    for (let i = 0; i < ms.length; i++) {
+      if (i === 0) pathD += `M ${ms[i].x} ${ms[i].y}`;
+      else pathD += ` L ${ms[i].x} ${ms[i].y}`;
+    }
+    html += `<path class="path-line" d="${pathD}" stroke="${s.color}" stroke-width="2.5" opacity="0.6" fill="none"/>`;
+
+    // 距离标注 (在每段中间)
+    for (let i = 1; i < ms.length; i++) {
+      const mx = (ms[i-1].x + ms[i].x) / 2;
+      const my = (ms[i-1].y + ms[i].y) / 2;
+      const dx = ms[i].x - ms[i-1].x;
+      const dy = ms[i].y - ms[i-1].y;
+      const dist = ms[i].distance;
+      const angle = Math.atan2(dy, dx) * 180 / Math.PI;
+
+      // 背景
+      const labelW = dist >= 100 ? 56 : 46;
+      html += `<rect class="dist-bg" x="${mx - labelW/2}" y="${my - 9}" width="${labelW}" height="16" rx="3"/>`;
+      html += `<text class="dist-label" x="${mx}" y="${my + 3}" text-anchor="middle" fill="${s.color}" transform="rotate(${angle},${mx},${my})">${ms[i].direction_label || ms[i].direction + dist + '里'}</text>`;
+    }
+  });
+
+  // 山峰标记
+  allMountains.forEach(m => {
+    const sz = m.isFirst ? 10 : 7;
+    const shape = m.isFirst
+      ? `<polygon points="${m.x-sz},${m.y+sz*0.6} ${m.x+sz},${m.y+sz*0.6} ${m.x},${m.y-sz*1.2}" fill="${m.seriesColor}" stroke="#fff" stroke-width="0.5" class="mtn-marker" data-name="${m.name}"/>`
+      : `<polygon points="${m.x-sz},${m.y+sz*0.6} ${m.x+sz},${m.y+sz*0.6} ${m.x},${m.y-sz*1.2}" fill="${m.seriesColor}" opacity="0.85" stroke="rgba(255,255,255,0.5)" stroke-width="0.5" class="mtn-marker" data-name="${m.name}"/>`;
+    html += shape;
+
+    // 首山加星标
+    if (m.isFirst) {
+      html += `<text x="${m.x}" y="${m.y - sz*1.5 - 4}" text-anchor="middle" font-size="12" fill="#c9a037">★</text>`;
+    }
+  });
+
+  // 名称标签 (偏移以避免重叠)
+  allMountains.forEach((m, idx) => {
+    // 标签位置 - 交替上下放置
+    const offsetY = idx % 3 === 0 ? -20 : (idx % 3 === 1 ? -32 : 14);
+    const offsetX = idx % 2 === 0 ? 0 : 0;
+    const cls = m.isFirst ? 'mtn-label first-label' : 'mtn-label';
+    html += `<text class="${cls}" x="${m.x + offsetX}" y="${m.y + offsetY}" text-anchor="middle" fill="${m.seriesColor}" data-name="${m.name}" style="font-size:${m.isFirst?'14':'12'}px">${m.name}</text>`;
+  });
+
+  // 资源图标 (在部分代表性山峰旁显示)
+  allMountains.forEach(m => {
+    let icons = '';
+    if (m.minerals && m.minerals.length > 0) icons += '💎';
+    if (m.plants && m.plants.length > 0) icons += '🌿';
+    if (m.animals && m.animals.length > 0) icons += '🦊';
+    if (m.rivers && m.rivers.length > 0) icons += '💧';
+    if (icons.length > 0) {
+      html += `<text class="resource-icon" x="${m.x + 12}" y="${m.y - 4}" font-size="10">${icons}</text>`;
+    }
+  });
+
+  svg.innerHTML = html;
+
+  // 绑定事件
+  svg.querySelectorAll('.mtn-marker, .mtn-label, .first-label').forEach(el => {
+    el.addEventListener('click', (e) => {
+      const name = el.getAttribute('data-name');
+      showDetail(name);
+    });
+    el.addEventListener('mouseenter', (e) => {
+      const name = el.getAttribute('data-name');
+      const m = allMountains.find(mt => mt.name === name);
+      if (m) showTooltip(e, m);
+    });
+    el.addEventListener('mouseleave', () => {
+      tooltip.style.display = 'none';
+    });
+  });
+}
+
+function showTooltip(e, m) {
+  const rect = mapWrap.getBoundingClientRect();
+  tooltip.innerHTML = `<b>${m.name}</b> <span style="color:#c9a96e">[${m.seriesName}]</span><br>${m.direction === '首' ? '首山' : m.direction + m.distance + '里'}<br>${m.text ? m.text.substring(0,60) + '…' : ''}`;
+  tooltip.style.display = 'block';
+  tooltip.style.left = (e.clientX - rect.left + 15) + 'px';
+  tooltip.style.top = (e.clientY - rect.top - 30) + 'px';
+}
+
+function showDetail(name) {
+  const m = allMountains.find(mt => mt.name === name);
+  if (!m) return;
+  currentMountain = m;
+
+  let html = `<h2>${m.name}</h2>`;
+  html += `<div style="color:#6b5a4a;font-size:12px;">${m.seriesName} | ${m.direction === '首' ? '首山' : '方向: ' + m.direction + ' · 距离: ' + m.distance + '里'} | 坐标: (${Math.round(m.x)}, ${Math.round(m.y)})里</div>`;
+
+  if (m.text) {
+    html += `<div class="section-title">📜 原文</div>`;
+    html += `<div class="quote">${m.text}</div>`;
+  }
+
+  if (m.minerals && m.minerals.length > 0) {
+    html += `<div class="section-title">💎 矿产</div><div class="tag-row">`;
+    m.minerals.forEach(t => { html += `<span class="tag ${m.seriesId === 'nanshan1' ? 's1' : m.seriesId === 'nanshan2' ? 's2' : 's3'}">${t}</span>`; });
+    html += `</div>`;
+  }
+
+  if (m.plants && m.plants.length > 0) {
+    html += `<div class="section-title">🌿 植物</div>`;
+    m.plants.forEach(p => { html += `<div style="margin:2px 0"><span class="tag ${m.seriesId === 'nanshan1' ? 's1' : m.seriesId === 'nanshan2' ? 's2' : 's3'}">${p.name}</span> ${p.desc}</div>`; });
+  }
+
+  if (m.animals && m.animals.length > 0) {
+    html += `<div class="section-title">🦊 异兽</div>`;
+    m.animals.forEach(a => { html += `<div style="margin:2px 0"><span class="tag ${m.seriesId === 'nanshan1' ? 's1' : m.seriesId === 'nanshan2' ? 's2' : 's3'}">${a.name}</span> ${a.desc}</div>`; });
+  }
+
+  if (m.rivers && m.rivers.length > 0) {
+    html += `<div class="section-title">💧 水系</div>`;
+    m.rivers.forEach(r => { html += `<div style="margin:2px 0"><span class="tag ${m.seriesId === 'nanshan1' ? 's1' : m.seriesId === 'nanshan2' ? 's2' : 's3'}">${r.name}</span> ${r.desc}</div>`; });
+  }
+
+  detailPanel.innerHTML = html;
+}
+
+// ============= 交互 =============
+function applyZoom(z) {
+  currentZoom = Math.max(0.05, Math.min(8, z));
+  buildSVG(currentZoom);
+  zoomLabel.textContent = Math.round(currentZoom * 100) + '%';
+  updateScaleBar();
+}
+
+function zoomIn() { applyZoom(currentZoom * 1.25); }
+function zoomOut() { applyZoom(currentZoom / 1.25); }
+function zoomFit() {
+  const wrapRect = mapWrap.getBoundingClientRect();
+  const fitW = wrapRect.width / MAP_W;
+  const fitH = wrapRect.height / MAP_H;
+  applyZoom(Math.min(fitW, fitH) * 0.9);
+}
+function zoomReset() { applyZoom(1); }
+
+function updateScaleBar() {
+  // 在屏幕上显示约 500里 的实际像素
+  const pixel500 = 500 * currentZoom;
+  scaleBarBar.style.width = Math.min(pixel500, 200) + 'px';
+  scaleBarLabel.textContent = pixel500 <= 200 ? '500里' : Math.round(500 * 200 / pixel500) + '里';
+}
+
+// 鼠标滚轮缩放
+mapWrap.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  const factor = e.deltaY < 0 ? 1.15 : 0.87;
+  applyZoom(currentZoom * factor);
+}, { passive: false });
+
+// 坐标显示
+mapWrap.addEventListener('mousemove', (e) => {
+  const rect = mapWrap.getBoundingClientRect();
+  const sx = (e.clientX - rect.left + mapWrap.scrollLeft) / currentZoom + minX;
+  const sy = (e.clientY - rect.top + mapWrap.scrollTop) / currentZoom + minY;
+  coordIndicator.textContent = `X: ${Math.round(sx)}里 | Y: ${Math.round(sy)}里`;
+});
+
+// 快捷键
+document.addEventListener('keydown', (e) => {
+  if (e.key === '+' || e.key === '=') { e.preventDefault(); zoomIn(); }
+  if (e.key === '-') { e.preventDefault(); zoomOut(); }
+  if (e.key === '0') { e.preventDefault(); zoomFit(); }
+  if (e.key === '1') { e.preventDefault(); zoomReset(); }
+});
+
+// ============= 初始化 =============
+// 显示系列标题到详情面板
+const seriesInfo = seriesData.map(s => {
+  return `<div style="margin-bottom:8px;">
+    <b style="color:${s.color};">${s.name}</b>
+    <div style="font-size:11px;color:#6b5a4a;">${s.summary}</div>
+  </div>`;
+}).join('');
+
+// 初始缩放适应窗口
+setTimeout(() => {
+  zoomFit();
+  detailPanel.innerHTML = `
+    <h2>山海经·南山经</h2>
+    <div style="font-size:12px;color:#6b5a4a;margin-bottom:8px;">凡四十山，万六千三百八十里</div>
+    <div class="section-title">📖 三列山经</div>
+    ${seriesInfo}
+    <div class="section-title">🗺️ 地图说明</div>
+    <div style="font-size:12px;line-height:1.8;color:#6b5a4a;">
+      · 每座山按原文方位/距离在坐标系中定位<br>
+      · <b>东</b>=X轴正方向&nbsp; <b>南</b>=Y轴正方向<br>
+      · <b>东南</b>=45°斜线(右下)<br>
+      · 线段长度 = 原文距离 (1里=1像素)<br>
+      · 鼠标滚轮缩放 | 拖拽平移 | 点击山查看详情<br>
+      · 按 +/- 缩放 | 0 适应 | 1 原始比例
+    </div>
+    <div class="section-title">📊 数据来源</div>
+    <div style="font-size:11px;color:#6b5a4a;">识典古籍 (shidianguji.com)<br>《山海经·南山经》原文</div>
+  `;
+}, 100);
+
+console.log('山海经·南山经地图已就绪');
+console.log(`地图范围: X[${Math.round(minX)}, ${Math.round(maxX)}] Y[${Math.round(minY)}, ${Math.round(maxY)}]`);
+console.log(`总山数: ${allMountains.length} 座`);
+console.log('南次一经: 10山 | 南次二经: 17山 (含东南方向段) | 南次三经: 13山');
+</script>
+</body>
+</html>
